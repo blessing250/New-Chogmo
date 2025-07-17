@@ -36,7 +36,7 @@ function App() {
   const mockClientData = {
     id: "2",
     name: "Blessing Nshuti",
-    email: "client@fitness.com",
+    email: "client@chogmspa.com",
     phone: "+250788888888",
     activePackages: [
       {

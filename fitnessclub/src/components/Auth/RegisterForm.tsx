@@ -69,7 +69,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
   return (
     <div className="bg-black/80 backdrop-blur-lg rounded-2xl p-8 w-full max-w-md border border-orange-500/20">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Join FitnessClub</h2>
+        <h2 className="text-3xl font-bold text-white mb-2">Join NewChogmspa</h2>
         <p className="text-gray-400">Create your account</p>
       </div>
 
