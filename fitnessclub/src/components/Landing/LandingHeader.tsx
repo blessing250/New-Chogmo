@@ -37,9 +37,9 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ onGetStarted }) => {
           {/* Logo */}
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">FC</span>
+              <span className="text-white font-bold text-sm">CS</span>
             </div>
-            <span className="text-2xl font-bold text-white">FitnessClub</span>
+            <span className="text-2xl font-bold text-white">CHOGMSpa</span>
           </div>
 
           {/* Desktop Navigation */}

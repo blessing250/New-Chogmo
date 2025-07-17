@@ -3,13 +3,15 @@ export interface User {
   _id?: string; // For MongoDB compatibility
   email: string;
   name: string;
-  phone: string;
+  phone?: string; // Optional as it's not in the backend schema
   role: "user" | "admin";
-  qrCode?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  membership?: string;
-  membershipExpiry?: string;
+  qrCode?: string; // Optional as it's not in the backend schema
+  membership: "paid" | "not paid";
+  membershipExpiry: Date | string | null;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+  lastLogin?: Date | string | null;
+  isActive?: boolean;
 }
 
 export interface ServicePackage {

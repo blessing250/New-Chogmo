@@ -46,9 +46,9 @@ const Footer: React.FC = () => {
             <div className="lg:col-span-2">
               <div className="flex items-center space-x-2 mb-6">
                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">FC</span>
+                  <span className="text-white font-bold text-sm">CS</span>
                 </div>
-                <span className="text-2xl font-bold text-white">FitnessClub</span>
+                <span className="text-2xl font-bold text-white">CHOGMSpa</span>
               </div>
               
               <p className="text-gray-400 mb-6 leading-relaxed">
@@ -60,7 +60,7 @@ const Footer: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center space-x-3 text-gray-400">
                   <Mail className="w-4 h-4 text-orange-500" />
-                  <span>hello@fitnessclub.com</span>
+                  <span>hello@chogmspa.com</span>
                 </div>
                 <div className="flex items-center space-x-3 text-gray-400">
                   <Phone className="w-4 h-4 text-orange-500" />
@@ -166,7 +166,7 @@ const Footer: React.FC = () => {
           <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
             {/* Copyright */}
             <div className="flex items-center space-x-2 text-gray-400">
-              <span>© 2024 FitnessClub. Made with</span>
+              <span>© 2024 CHOGM-Spa. Made with</span>
               <Heart className="w-4 h-4 text-orange-500 fill-current" />
               <span>for fitness enthusiasts.</span>
             </div>

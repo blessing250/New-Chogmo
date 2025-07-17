@@ -106,12 +106,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleForm }) => {
           </button>
         </p>
       </div>
-
-      <div className="mt-4 text-center text-xs text-gray-500">
-        <p>Demo credentials:</p>
-        <p>Admin: admin@fitness.com / password</p>
-        <p>Client: client@fitness.com / password</p>
-      </div>
     </div>
   );
 };

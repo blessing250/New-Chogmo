@@ -2,29 +2,15 @@ import React, { useEffect, useRef } from "react";
 import QRCode from "qrcode";
 
 interface QRCodeBoxProps {
-  member: {
-    _id?: string;
-    id?: string;
-    email: string;
-    name: string;
-    membership: string;
-    membershipExpiry?: string;
-  };
+  value: string; // Expect a JSON string
 }
 
-const QRCodeBox: React.FC<QRCodeBoxProps> = ({ member }) => {
+const QRCodeBox: React.FC<QRCodeBoxProps> = ({ value }) => {
   const qrCodeRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (member && qrCodeRef.current) {
-      const qrData = JSON.stringify({
-        userId: member._id || member.id,
-        email: member.email,
-        name: member.name,
-        membership: member.membership,
-        membershipExpiry: member.membershipExpiry,
-      });
-      QRCode.toCanvas(qrCodeRef.current, qrData, {
+    if (value && qrCodeRef.current) {
+      QRCode.toCanvas(qrCodeRef.current, value, {
         width: 200,
         margin: 1,
         color: {
@@ -33,7 +19,7 @@ const QRCodeBox: React.FC<QRCodeBoxProps> = ({ member }) => {
         },
       });
     }
-  }, [member]);
+  }, [value]);
 
   const handleDownload = () => {
     if (qrCodeRef.current) {

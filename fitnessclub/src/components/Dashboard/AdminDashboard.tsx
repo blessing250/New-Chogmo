@@ -1,474 +1,392 @@
-import React, { useState } from "react";
-import { useEffect } from "react";
-import { apiFetch } from "../../api";
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiFetch, fetchAllUsers, fetchAllPayments } from "../../api";
 import {
   Users,
   Calendar,
-  DollarSign,
   TrendingUp,
-  QrCode,
   Settings,
-  Activity,
   ScanLine,
+  Download,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import QRCodeBox from "./QRCodeBox";
+import QrScanner from 'qr-scanner';
+
+// Define interfaces for our data structures
+interface ServicePackage {
+  _id?: string;
+  id?: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: string;
+  sessions: number;
+  revenue?: number;
+}
+
+interface Booking {
+  _id: string;
+  user: { name: string; email: string };
+  servicePackages: { name: string; price: number }[];
+  date: string;
+  time: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+}
+
+interface Payment {
+  _id: string;
+  user: { name: string; email: string };
+  amount: number;
+  status: string;
+  date: string;
+  membershipType: string;
+}
+
+interface User {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  membership?: string;
+}
+
+interface Member {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  membership?: string;
+  membershipExpiry?: string;
+}
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("overview");
-  const [membership, setMembership] = useState<any>(null);
-  const [showQR, setShowQR] = useState(false);
-  const [upgrading, setUpgrading] = useState(false);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  // Real data from API
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    todayBookings: 0,
-    monthlyRevenue: 0,
-    activePackages: 0,
-  });
-  type User = {
-    _id?: string;
-    id?: string;
-    name?: string;
-    email?: string;
-    role?: string;
-    status?: string;
-  };
-  type Member = {
-    _id?: string;
-    id?: string;
-    name?: string;
-    email?: string;
-    membership?: string;
-    membershipExpiry?: string;
-  };
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
-  const [scannedUser, setScannedUser] = useState<Member | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
-  const [servicePackages, setServicePackages] = useState([]);
-  const [todayBookings, setTodayBookings] = useState([]);
-  const [revenueData, setRevenueData] = useState([]);
+  const [servicePackages, setServicePackages] = useState<ServicePackage[]>([]);
+  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    Promise.all([
-      apiFetch("/auth/all-users"),
-      apiFetch("/members"),
-      apiFetch("/appointments/today"),
-      apiFetch("/auth/stats"),
-      apiFetch("/revenue"),
-      apiFetch("/packages"),
-    ])
-      .then(([users, members, bookings, statsRes, revenue, packages]) => {
-        // Handle both array and wrapped object responses
-        setAllUsers(Array.isArray(users) ? users : users.users || []);
-        setAllMembers(Array.isArray(members) ? members : members.members || []);
-        setTodayBookings(bookings);
-        setStats(statsRes);
-        setRevenueData(revenue);
-        setServicePackages(packages);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [usersRes, membersRes, bookingsRes, packagesRes, paymentsRes] = await Promise.all([
+          fetchAllUsers(),
+          apiFetch("/members"),
+          apiFetch("/appointments/all"),
+          apiFetch("/packages"),
+          fetchAllPayments(),
+        ]);
 
-    // Membership check for logged in user
-    if (user && user._id) {
-      apiFetch(`/members/${user._id}`)
-        .then((member) => {
-          setMembership(member);
-          if (member && member.membership === "paid") {
-            setShowQR(true);
-          } else {
-            setShowQR(false);
-          }
-        })
-        .catch(() => setShowQR(false));
-    }
-  }, [user]);
+        setAllUsers(usersRes || []);
+        setAllMembers(Array.isArray(membersRes) ? membersRes : membersRes.members || []);
+        setAllBookings(bookingsRes || []);
+        setServicePackages(packagesRes || []);
+        setAllPayments(paymentsRes || []);
 
-  const handleUpgradeMembership = async () => {
-    setUpgrading(true);
-    setUpgradeError(null);
-    try {
-      // Call backend API to upgrade membership
-      const res = await apiFetch(`/members/${user._id || user.id}/upgrade`, {
-        method: "POST",
-        body: JSON.stringify({ membership: "paid" }),
-        headers: { "Content-Type": "application/json" },
-      });
-      if (res && res.membership === "paid") {
-        setMembership(res);
-        setShowQR(true);
-      } else {
-        setUpgradeError("Upgrade failed. Please try again.");
+      } catch (err) {
+        console.error("Failed to fetch initial data:", err);
+        setError("Failed to load dashboard data.");
+      } finally {
+        setLoading(false);
       }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleSyncUsers = async () => {
+    setSyncStatus("Syncing, please wait...");
+    try {
+      const response = await apiFetch("/members/sync-users", { method: "POST" });
+      setSyncStatus(response.message || "Sync completed successfully!");
     } catch (err: any) {
-      setUpgradeError(err.message || "Upgrade failed.");
-    } finally {
-      setUpgrading(false);
+      setSyncStatus(err.message || "Sync failed. Please check logs.");
     }
   };
 
+  const handleDownloadReport = async () => {
+    setIsDownloading(true);
+    setError(null);
+    try {
+      const blob = await apiFetch('/reports/download', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'NewChogmspa_Report.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download report:', err);
+      setError('Failed to download report. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  useEffect(() => {
+    let scanner: QrScanner | null = null;
+    if (showScanner && videoRef.current) {
+      scanner = new QrScanner(
+        videoRef.current,
+        (result) => {
+          if (scanner) scanner.stop();
+          setShowScanner(false);
+          navigate(`/admin/${result.data}`);
+        },
+        { highlightScanRegion: true, highlightCodeOutline: true }
+      );
+      scanner.start();
+    }
+    return () => { scanner?.destroy(); };
+  }, [showScanner, navigate]);
+
+  const handleUpdateAppointmentStatus = async (id: string, status: 'confirmed' | 'cancelled') => {
+    try {
+      const updatedBooking = await apiFetch(`/appointments/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      setAllBookings(currentBookings =>
+        currentBookings.map(b => (b._id === id ? { ...b, ...updatedBooking } : b))
+      );
+    } catch (err) {
+      console.error('Failed to update booking status:', err);
+      setError('Failed to update appointment status.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading Dashboard...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Welcome back, <span className="text-orange-500">{user?.name}</span>
-          </h1>
-          <p className="text-gray-400">Here's your business overview</p>
-        </div>
-        {/* Membership & QR Code or Upgrade Option */}
-        {membership &&
-          membership.membership !== "paid" &&
-          user?.role === "user" && (
-            <div className="mb-8 flex flex-col items-center">
-              <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center">
-                <h2 className="text-xl font-bold text-gray-900 mb-2">
-                  Upgrade Membership
-                </h2>
-                <p className="mb-4 text-gray-700">
-                  Your current membership is{" "}
-                  <span className="font-semibold">
-                    {membership.membership || "not paid"}
-                  </span>
-                  . Upgrade to access all features.
-                </p>
-                <button
-                  onClick={handleUpgradeMembership}
-                  disabled={upgrading}
-                  className="bg-orange-500 text-white px-6 py-2 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-                >
-                  {upgrading ? "Upgrading..." : "Upgrade Membership"}
-                </button>
-                {upgradeError && (
-                  <p className="mt-2 text-red-600">{upgradeError}</p>
-                )}
-              </div>
+    <div className="flex h-screen bg-gray-900 font-sans">
+      <div className="flex-1 p-6 md:p-10 bg-gray-900 text-white overflow-y-auto">
+        <header className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+            <p className="text-gray-400">Welcome back, {user?.name || "Admin"}!</p>
+          </div>
+          <button
+            onClick={handleDownloadReport}
+            disabled={isDownloading}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-5 h-5 mr-2" />
+            {isDownloading ? 'Downloading...' : 'Download Full Report'}
+          </button>
+        </header>
+
+        {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-6">{error}</div>}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 flex flex-col justify-between">
+                    <Users className="w-8 h-8 text-orange-500" />
+                    <p className="text-3xl font-bold">{allUsers.length}</p>
+                    <p className="text-gray-400">Total Users</p>
+                </div>
+                <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 flex flex-col justify-between">
+                    <Users className="w-8 h-8 text-green-500" />
+                    <p className="text-3xl font-bold">{allMembers.length}</p>
+                    <p className="text-gray-400">Active Members</p>
+                </div>
+                <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 flex flex-col justify-between">
+                    <Calendar className="w-8 h-8 text-blue-500" />
+                    <p className="text-3xl font-bold">{allBookings.length}</p>
+                    <p className="text-gray-400">Total Bookings</p>
+                </div>
+                <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 flex flex-col justify-between">
+                    <TrendingUp className="w-8 h-8 text-purple-500" />
+                    <p className="text-3xl font-bold">RWF {allPayments.reduce((acc, p) => acc + p.amount, 0)}</p>
+                    <p className="text-gray-400">Total Revenue</p>
+                </div>
             </div>
-          )}
-        {/* Membership & QR Code */}
-        {showQR && membership && (
-          <div className="mb-8 flex flex-col items-center">
-            <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
-                Membership QR Code
+
+            <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-orange-500" />
+                Recent Appointments
               </h2>
-              <QRCodeBox member={membership} />
-              <div className="mt-4 text-gray-700">
-                <p>
-                  <span className="font-semibold">Name:</span> {membership.name}
-                </p>
-                <p>
-                  <span className="font-semibold">Email:</span>{" "}
-                  {membership.email}
-                </p>
-                <p>
-                  <span className="font-semibold">Membership Status:</span>{" "}
-                  <span
-                    className={`ml-2 px-2 py-1 rounded-full text-sm ${
-                      membership.membership === "paid"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {membership.membership}
-                  </span>
-                </p>
-                {membership.membershipExpiry && (
-                  <p>
-                    <span className="font-semibold">Expires:</span>{" "}
-                    {new Date(membership.membershipExpiry).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 hover:border-orange-500/40 transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Total Users</p>
-                <p className="text-3xl font-bold text-white">
-                  {(allUsers.length ?? 0).toLocaleString()}
-                </p>
-                <p className="text-green-400 text-sm">+12% from last month</p>
-              </div>
-              <Users className="w-8 h-8 text-orange-500" />
-            </div>
-          </div>
-
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 hover:border-orange-500/40 transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Paid Memberships</p>
-                <p className="text-3xl font-bold text-white">
-                  {allMembers.filter((m) => m.membership === "paid").length}
-                </p>
-                <p className="text-green-400 text-sm">Active</p>
-              </div>
-              <DollarSign className="w-8 h-8 text-orange-500" />
-            </div>
-          </div>
-
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 hover:border-orange-500/40 transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Monthly Revenue</p>
-                <p className="text-3xl font-bold text-white">
-                  {`RWF ${(
-                    allMembers.filter((m) => m.membership === "paid").length *
-                    20000
-                  ).toLocaleString()}`}
-                </p>
-                <p className="text-green-400 text-sm">From memberships</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-orange-500" />
-            </div>
-          </div>
-
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 hover:border-orange-500/40 transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Active Packages</p>
-                <p className="text-3xl font-bold text-white">
-                  {servicePackages.length}
-                </p>
-                <p className="text-green-400 text-sm">Available</p>
-              </div>
-              <Activity className="w-8 h-8 text-orange-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button
-              className="bg-orange-500 hover:bg-orange-600 text-white p-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-              onClick={() => setShowScanner(true)}
-            >
-              <ScanLine className="w-5 h-5" />
-              <span>Scan Membership QR</span>
-            </button>
-            <button className="bg-gray-700 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2">
-              <Users className="w-5 h-5" />
-              <span>Add New User</span>
-            </button>
-            <button className="bg-gray-700 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2">
-              <Settings className="w-5 h-5" />
-              <span>Manage Services</span>
-            </button>
-          </div>
-          {/* QR Scanner Modal */}
-          {showScanner && (
-            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-8 shadow-lg w-full max-w-md">
-                <h2 className="text-xl font-bold mb-4">Scan User QR Code</h2>
-                {/* Replace with actual QR scanner logic */}
-                <input
-                  type="text"
-                  placeholder="Paste scanned user ID here..."
-                  className="border p-2 w-full mb-4"
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (id.length > 5) {
-                      apiFetch(`/members/${id}`)
-                        .then((member) => setScannedUser(member))
-                        .catch(() => setScannedUser(null));
-                    }
-                  }}
-                />
-                {scannedUser ? (
-                  <div className="bg-gray-100 rounded p-4">
-                    <p>
-                      <strong>Name:</strong> {scannedUser.name}
-                    </p>
-                    <p>
-                      <strong>Email:</strong> {scannedUser.email}
-                    </p>
-                    <p>
-                      <strong>Membership:</strong> {scannedUser.membership}
-                    </p>
-                    <p>
-                      <strong>Status:</strong>{" "}
-                      {scannedUser.membership === "paid" ? "Paid" : "Not Paid"}
-                    </p>
-                    {scannedUser.membershipExpiry && (
-                      <p>
-                        <strong>Expires:</strong>{" "}
-                        {new Date(
-                          scannedUser.membershipExpiry
-                        ).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-gray-500">
-                    Scan a QR code to view membership status.
-                  </p>
-                )}
-                <button
-                  className="mt-4 bg-orange-500 text-white px-4 py-2 rounded"
-                  onClick={() => setShowScanner(false)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Users & Memberships Table */}
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 col-span-2">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-              <Users className="w-5 h-5 mr-2 text-orange-500" />
-              Users & Memberships
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left">
-                <thead>
-                  <tr className="bg-gray-800 text-gray-300">
-                    <th className="py-2 px-4">Name</th>
-                    <th className="py-2 px-4">Email</th>
-                    <th className="py-2 px-4">Role</th>
-                    <th className="py-2 px-4">Membership</th>
-                    <th className="py-2 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allUsers.map((user) => {
-                    const member = allMembers.find(
-                      (m) => m.email === user.email
-                    );
-                    return (
-                      <tr
-                        key={user._id || user.id}
-                        className="border-b border-gray-700"
-                      >
-                        <td className="py-2 px-4 text-white">{user.name}</td>
-                        <td className="py-2 px-4 text-gray-300">
-                          {user.email}
-                        </td>
-                        <td className="py-2 px-4 text-gray-300">{user.role}</td>
-                        <td className="py-2 px-4">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs ${
-                              member?.membership === "paid"
-                                ? "bg-green-500/20 text-green-400"
-                                : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {member?.membership || "none"}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-300">
+                  <thead className="bg-gray-800/50">
+                    <tr>
+                      <th className="p-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Client</th>
+                      <th className="p-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Date & Time</th>
+                      <th className="p-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="p-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {allBookings.slice(0, 5).map((booking) => (
+                      <tr key={booking._id}>
+                        <td className="p-3 whitespace-nowrap">{booking.user?.name || 'N/A'}</td>
+                        <td className="p-3 whitespace-nowrap">{`${new Date(booking.date).toLocaleDateString()} at ${booking.time}`}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : booking.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {booking.status}
                           </span>
                         </td>
-                        <td className="py-2 px-4">
-                          {member?.membership === "paid" ? "Paid" : "Not Paid"}
+                        <td className="p-3 whitespace-nowrap">
+                          {booking.status === 'pending' && (
+                            <div className="flex items-center space-x-2">
+                              <button onClick={() => handleUpdateAppointmentStatus(booking._id, 'confirmed')} className="bg-green-500 text-white px-3 py-1 rounded-md text-xs hover:bg-green-600 transition-colors">Approve</button>
+                              <button onClick={() => handleUpdateAppointmentStatus(booking._id, 'cancelled')} className="bg-red-500 text-white px-3 py-1 rounded-md text-xs hover:bg-red-600 transition-colors">Cancel</button>
+                            </div>
+                          )}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+                {allBookings.length === 0 && <p className="text-gray-500 text-center py-4">No appointments found.</p>}
+              </div>
             </div>
-          </div>
 
-          {/* Service Packages & Options */}
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-              <Settings className="w-5 h-5 mr-2 text-orange-500" />
-              Manage Services & Packages
-            </h2>
-            <div className="space-y-2">
-              {servicePackages.map((pkg) => (
-                <div
-                  key={pkg._id || pkg.id}
-                  className="bg-gray-800/50 rounded p-3 mb-2"
-                >
-                  <p className="text-white font-semibold">{pkg.name}</p>
-                  <p className="text-gray-300 text-sm">{pkg.description}</p>
-                  <p className="text-orange-400 text-xs">
-                    Price: RWF {pkg.price} | Duration: {pkg.duration} |
-                    Sessions: {pkg.sessions}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-              <Calendar className="w-5 h-5 mr-2 text-orange-500" />
-              Today's Bookings
-            </h2>
-            <div className="space-y-4">
-              {todayBookings.map((booking) => (
-                <div
-                  key={booking.id}
-                  className="bg-gray-800/50 rounded-lg p-4 border border-gray-700"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        {booking.client}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        {booking.service} - {booking.time}
-                      </p>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        booking.status === "confirmed"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {booking.status}
-                    </span>
+            <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-white flex items-center">
+                  <Settings className="w-5 h-5 mr-2 text-orange-500" />
+                  Manage Services & Packages
+                </h2>
+                <Link to="/admin/manage-packages" className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors">Manage</Link>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                {servicePackages.map((pkg) => (
+                  <div key={pkg._id || pkg.id} className="bg-gray-800/50 rounded p-3 mb-2">
+                    <p className="text-white font-semibold">{pkg.name}</p>
+                    <p className="text-gray-300 text-sm">{pkg.description}</p>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* All Users Table */}
+            <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-orange-500" />
+                All Users
+              </h2>
+              <div className="overflow-x-auto max-h-96">
+                <table className="w-full text-sm text-left text-gray-300">
+                  <thead className="text-xs text-gray-400 uppercase bg-gray-800/50">
+                    <tr>
+                      <th scope="col" className="p-3">Name</th>
+                      <th scope="col" className="p-3">Email</th>
+                      <th scope="col" className="p-3">Role</th>
+                      <th scope="col" className="p-3">Membership</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allUsers.map((user) => (
+                      <tr key={user._id || user.id} className="border-b border-gray-700 hover:bg-gray-800/50">
+                        <td className="p-3 font-medium text-white whitespace-nowrap">{user.name}</td>
+                        <td className="p-3">{user.email}</td>
+                        <td className="p-3 capitalize">{user.role}</td>
+                                                <td className="p-3">
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              user.membership?.toLowerCase() === 'paid'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                            {user.membership ? user.membership : 'Not Paid'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {allUsers.length === 0 && <p className="text-gray-500 text-center py-4">No users found.</p>}
+              </div>
+            </div>
+
+            {/* All Payments Table */}
+            <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2 text-orange-500" />
+                All Payments
+              </h2>
+              <div className="overflow-x-auto max-h-96">
+                <table className="w-full text-sm text-left text-gray-300">
+                  <thead className="text-xs text-gray-400 uppercase bg-gray-800/50">
+                    <tr>
+                      <th scope="col" className="p-3">User</th>
+                      <th scope="col" className="p-3">Amount</th>
+                      <th scope="col" className="p-3">Status</th>
+                      <th scope="col" className="p-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allPayments.map((payment) => (
+                      <tr key={payment._id} className="border-b border-gray-700 hover:bg-gray-800/50">
+                        <td className="p-3 font-medium text-white whitespace-nowrap">{payment.user?.name || 'N/A'}</td>
+                        <td className="p-3">RWF {payment.amount.toFixed(2)}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 text-xs rounded-full ${ payment.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400' }`}>
+                            {payment.status}
+                          </span>
+                        </td>
+                        <td className="p-3">{new Date(payment.date).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {allPayments.length === 0 && <p className="text-gray-500 text-center py-4">No payments found.</p>}
+              </div>
             </div>
           </div>
 
-          {/* Revenue Chart & Streams */}
-          <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20 lg:col-span-2">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-orange-500" />
-              Revenue Overview
-            </h2>
-            <div className="h-64 flex items-end space-x-4">
-              {servicePackages.map((pkg, idx) => (
-                <div
-                  key={pkg._id || pkg.id}
-                  className="flex-1 flex flex-col items-center"
-                >
-                  <div
-                    className="w-full bg-orange-500 rounded-t-lg hover:bg-orange-600 transition-colors duration-200"
-                    style={{
-                      height: `${
-                        (pkg.revenue ? pkg.revenue / 100000 : 0) * 100
-                      }%`,
-                    }}
-                  ></div>
-                  <p className="text-xs text-gray-400 mt-2">{pkg.name}</p>
-                  <p className="text-xs text-white">
-                    RWF {pkg.revenue ? pkg.revenue.toLocaleString() : "0"}
-                  </p>
-                </div>
-              ))}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-black/60 backdrop-blur-lg rounded-2xl p-6 border border-orange-500/20">
+              <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
+              <div className="space-y-3">
+                <button onClick={() => setShowScanner(true)} className="w-full flex items-center justify-center bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors">
+                  <ScanLine className="w-5 h-5 mr-2" />
+                  Scan Member QR
+                </button>
+                <Link to="/admin/manage-users" className="w-full flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600 transition-colors">
+                  <Users className="w-5 h-5 mr-2" />
+                  Manage Users
+                </Link>
+                <button onClick={handleSyncUsers} className="w-full flex items-center justify-center bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors">
+                  <Settings className="w-5 h-5 mr-2" />
+                  Sync Users to Members
+                </button>
+              </div>
+              {syncStatus && <p className="text-center text-sm text-gray-400 mt-4">{syncStatus}</p>}
             </div>
+
+            {showScanner && (
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                <div className="bg-gray-900 p-4 rounded-lg relative">
+                  <h3 className="text-white text-lg mb-2">Scan QR Code</h3>
+                  <video ref={videoRef} className="w-64 h-64 rounded"></video>
+                  <button onClick={() => setShowScanner(false)} className="absolute top-2 right-2 text-white">&times;</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

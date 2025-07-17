@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -14,14 +14,16 @@ import LoginForm from "./components/Auth/LoginForm";
 import RegisterForm from "./components/Auth/RegisterForm";
 import ClientDashboard from "./components/Dashboard/ClientDashboard";
 import AdminDashboard from "./components/Dashboard/AdminDashboard";
+import ManagePackages from "./pages/ManagePackages";
 import Reports from "./pages/Reports";
-import ServicePackages from "./pages/ServicePackages";
 import Appointments from "./pages/Appointments";
 import Payments from "./pages/Payments";
 import Attendance from "./pages/Attendance";
 import BookAppointment from "./pages/BookAppointment";
-import QRCodeScanner from "./components/QRCode/QRCodeScanner";
+
 import QRCodeResult from "./components/QRCode/QRCodeResult";
+import UserDetailsPage from "./pages/UserDetailsPage";
+import AdminRoute from "./components/Routes/AdminRoute";
 
 function App() {
   const { user, isLoading } = useAuth();
@@ -33,9 +35,9 @@ function App() {
   // Mock client data for QR code scanning
   const mockClientData = {
     id: "2",
-    name: "John Doe",
+    name: "Blessing Nshuti",
     email: "client@fitness.com",
-    phone: "+1234567891",
+    phone: "+250788888888",
     activePackages: [
       {
         id: "1",
@@ -138,98 +140,30 @@ function App() {
               <Link to="/admin" className="text-orange-400 hover:text-white">
                 Dashboard
               </Link>
-              <Link to="/reports" className="text-orange-400 hover:text-white">
-                Reports
-              </Link>
-              <Link
-                to="/service-packages"
-                className="text-orange-400 hover:text-white"
-              >
-                Service Packages
-              </Link>
-              <Link
-                to="/appointments"
-                className="text-orange-400 hover:text-white"
-              >
-                Appointments
-              </Link>
-              <Link to="/payments" className="text-orange-400 hover:text-white">
-                Payments
-              </Link>
-              <Link
-                to="/attendance"
-                className="text-orange-400 hover:text-white"
-              >
-                Attendance
-              </Link>
             </>
           ) : (
-            <>
-              <Link to="/client" className="text-orange-400 hover:text-white">
-                Dashboard
-              </Link>
-              <Link to="/reports" className="text-orange-400 hover:text-white">
-                Reports
-              </Link>
-              <Link
-                to="/book-appointment"
-                className="text-orange-400 hover:text-white"
-              >
-                Book Appointment
-              </Link>
-              <Link
-                to="/appointments"
-                className="text-orange-400 hover:text-white"
-              >
-                Appointments
-              </Link>
-              <Link to="/payments" className="text-orange-400 hover:text-white">
-                Payments
-              </Link>
-              <Link
-                to="/attendance"
-                className="text-orange-400 hover:text-white"
-              >
-                Attendance
-              </Link>
+            <>    
             </>
           )}
         </nav>
 
         <Routes>
-          {/* Admin routes */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/service-packages" element={<ServicePackages />} />
-          <Route path="/appointments" element={<Appointments />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/attendance" element={<Attendance />} />
+            {/* Client Routes */}
+            <Route path="/client" element={<ClientDashboard />} />
+            <Route path="/book-appointment" element={<BookAppointment />} />
 
-          {/* Client routes */}
-          <Route path="/client" element={<ClientDashboard />} />
-          <Route path="/book-appointment" element={<BookAppointment />} />
-          {/* Shared routes */}
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/appointments" element={<Appointments />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/attendance" element={<Attendance />} />
+            {/* Admin Routes */}
+            <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="/admin/manage-packages" element={<AdminRoute><ManagePackages /></AdminRoute>} />
+            <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+            <Route path="/admin/appointments" element={<AdminRoute><Appointments /></AdminRoute>} />
+            <Route path="/admin/payments" element={<AdminRoute><Payments /></AdminRoute>} />
+            <Route path="/admin/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
+            <Route path="/admin/:userID" element={<AdminRoute><UserDetailsPage /></AdminRoute>} />
 
-          {/* Default route */}
-          <Route
-            path="*"
-            element={
-              <Navigate to={user.role === "admin" ? "/admin" : "/client"} />
-            }
-          />
-        </Routes>
-
-        {/* QR Code Scanner Modal */}
-        {showQRScanner && (
-          <QRCodeScanner
-            onScan={handleQRScan}
-            onClose={() => setShowQRScanner(false)}
-          />
-        )}
+            {/* Fallback Route */}
+            <Route path="*" element={<Navigate to={user.role === 'admin' ? '/admin' : '/client'} replace />} />
+          </Routes>
 
         {/* QR Code Result Modal */}
         {qrResult && (

@@ -19,43 +19,12 @@ const Header: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center">
             <div className="text-2xl font-bold text-white">
-              <span className="text-orange-500">Fitness</span>
-              <span className="text-white">Club</span>
+              <span className="text-orange-500">CHOGM</span>
+              <span className="text-white">Spa</span>
             </div>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-              Dashboard
-            </a>
-            {user?.role === 'admin' && (
-              <>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  Users
-                </a>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  Services
-                </a>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  Analytics
-                </a>
-              </>
-            )}
-            {user?.role === 'client' && (
-              <>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  Bookings
-                </a>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  Packages
-                </a>
-                <a href="#" className="text-white hover:text-orange-500 transition-colors duration-200">
-                  History
-                </a>
-              </>
-            )}
-          </nav>
+       
 
           {/* Profile Dropdown */}
           <div className="relative">
